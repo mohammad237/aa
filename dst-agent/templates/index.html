@@ -813,7 +813,7 @@ async function genContent() {
     outDiv.querySelector('.generating')?.remove();
     document.getElementById('cActions').style.display = 'flex';
   } catch (e) {
-    outDiv.innerHTML = '<div class="out-box">Error generating content. Check your API key.</div>';
+    outDiv.innerHTML = `<div class="out-box" style="color:#f87171">⚠️ Error: ${e.message}</div>`;
   }
 
   btn.disabled = false;
@@ -854,7 +854,7 @@ async function genCampaign() {
     outDiv.querySelector('.generating')?.remove();
     document.getElementById('pActions').style.display = 'flex';
   } catch (e) {
-    outDiv.innerHTML = '<div class="out-box">Error generating plan. Check your API key.</div>';
+    outDiv.innerHTML = `<div class="out-box" style="color:#f87171">⚠️ Error: ${e.message}</div>`;
   }
 
   btn.disabled = false;
@@ -863,22 +863,35 @@ async function genCampaign() {
 
 // ── SHARED STREAM READER ─────────────────────────────────
 async function readStream(response, onChunk) {
+  // If server returned an error status, surface it
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Server error ${response.status}: ${text}`);
+  }
+
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
+  let buffer = '';
 
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
 
-    const lines = decoder.decode(value).split('\n');
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop(); // keep incomplete last line
+
     for (const line of lines) {
       if (!line.startsWith('data: ')) continue;
       const raw = line.slice(6).trim();
       if (raw === '[DONE]') return;
       try {
         const parsed = JSON.parse(raw);
+        if (parsed.error) throw new Error(parsed.error);
         if (parsed.text) onChunk(parsed.text);
-      } catch (_) {}
+      } catch (e) {
+        if (e.message && !e.message.startsWith('{')) throw e;
+      }
     }
   }
 }

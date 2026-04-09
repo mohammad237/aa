@@ -151,8 +151,7 @@ def chat():
         try:
             with client.messages.stream(
                 model="claude-opus-4-6",
-                max_tokens=1024,
-                thinking={"type": "adaptive"},
+                max_tokens=2048,
                 system=BEAUTY_ADVISOR_SYSTEM,
                 messages=messages
             ) as stream:
