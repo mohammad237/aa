@@ -1,0 +1,910 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DST AI Marketing Agent</title>
+  <style>
+    :root {
+      --bg:         #080808;
+      --bg-card:    #111111;
+      --bg-input:   #181818;
+      --gold:       #C8A96E;
+      --gold-light: #E8C98E;
+      --gold-dim:   rgba(200,169,110,0.12);
+      --text:       #f0f0f0;
+      --muted:      #888888;
+      --border:     #222222;
+      --border-hover: #333;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── HEADER ── */
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px 28px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(8,8,8,0.97);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      backdrop-filter: blur(8px);
+    }
+
+    .logo {
+      width: 38px;
+      height: 38px;
+      background: var(--gold);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      font-size: 13px;
+      color: #000;
+      letter-spacing: -0.5px;
+      flex-shrink: 0;
+    }
+
+    .header-brand { line-height: 1; }
+    .header-name {
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+    .header-sub {
+      font-size: 10px;
+      color: var(--gold);
+      letter-spacing: 2.5px;
+      text-transform: uppercase;
+      margin-top: 3px;
+    }
+
+    .header-status {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--muted);
+      padding: 5px 12px;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #4ade80;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.35; }
+    }
+
+    /* ── TABS ── */
+    .tabs {
+      display: flex;
+      padding: 0 28px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg);
+    }
+
+    .tab {
+      padding: 13px 20px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--muted);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: color 0.2s, border-color 0.2s;
+      user-select: none;
+      letter-spacing: 0.2px;
+    }
+    .tab:hover { color: var(--text); }
+    .tab.active {
+      color: var(--gold);
+      border-bottom-color: var(--gold);
+    }
+
+    /* ── SECTIONS ── */
+    .section { display: none; flex: 1; }
+    .section.active { display: flex; }
+
+    /* ── CHAT ── */
+    #chat-section {
+      flex-direction: column;
+      height: calc(100vh - 113px);
+    }
+
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .msg { display: flex; flex-direction: column; max-width: 76%; }
+    .msg.user  { align-self: flex-end; }
+    .msg.ai    { align-self: flex-start; }
+
+    .msg-label {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 5px;
+    }
+    .msg.user .msg-label { text-align: right; }
+
+    .msg-bubble {
+      padding: 13px 16px;
+      border-radius: 12px;
+      font-size: 14px;
+      line-height: 1.65;
+      white-space: pre-wrap;
+      word-break: break-word;
+      animation: fadeUp 0.25s ease;
+    }
+    .msg.user .msg-bubble {
+      background: var(--gold);
+      color: #000;
+      font-weight: 450;
+      border-bottom-right-radius: 3px;
+    }
+    .msg.ai .msg-bubble {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-bottom-left-radius: 3px;
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Welcome card */
+    .welcome-bubble {
+      background: linear-gradient(135deg, #161616, #111);
+      border: 1px solid var(--border);
+      border-bottom-left-radius: 3px;
+    }
+    .welcome-title {
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .gold { color: var(--gold); }
+    .welcome-body {
+      font-size: 13px;
+      color: #aaa;
+      line-height: 1.6;
+    }
+    .mineral-strip {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+    .mineral-tag {
+      font-size: 11px;
+      padding: 3px 9px;
+      border: 1px solid var(--border-hover);
+      border-radius: 12px;
+      color: var(--muted);
+    }
+
+    /* Typing */
+    .typing-dots {
+      display: flex;
+      gap: 5px;
+      padding: 13px 16px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      border-bottom-left-radius: 3px;
+      width: fit-content;
+    }
+    .dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--gold);
+      animation: bounce 1.3s infinite;
+    }
+    .dot:nth-child(2) { animation-delay: 0.18s; }
+    .dot:nth-child(3) { animation-delay: 0.36s; }
+    @keyframes bounce {
+      0%, 60%, 100% { transform: translateY(0); }
+      30%            { transform: translateY(-7px); }
+    }
+
+    /* Quick actions */
+    .quick-bar {
+      padding: 10px 28px 0;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .quick {
+      padding: 6px 13px;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      font-size: 12px;
+      color: var(--muted);
+      cursor: pointer;
+      background: transparent;
+      transition: all 0.18s;
+      font-family: inherit;
+    }
+    .quick:hover {
+      border-color: var(--gold);
+      color: var(--gold);
+      background: var(--gold-dim);
+    }
+
+    /* Chat input */
+    .chat-input-row {
+      display: flex;
+      align-items: flex-end;
+      gap: 10px;
+      padding: 14px 28px;
+      border-top: 1px solid var(--border);
+    }
+    .chat-input {
+      flex: 1;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 15px;
+      color: var(--text);
+      font-size: 14px;
+      font-family: inherit;
+      resize: none;
+      min-height: 46px;
+      max-height: 120px;
+      outline: none;
+      transition: border-color 0.2s;
+      line-height: 1.5;
+    }
+    .chat-input:focus { border-color: var(--gold); }
+    .chat-input::placeholder { color: var(--muted); }
+
+    .send-btn {
+      width: 46px; height: 46px;
+      background: var(--gold);
+      border: none;
+      border-radius: 8px;
+      color: #000;
+      font-size: 20px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: background 0.2s;
+      font-weight: 600;
+    }
+    .send-btn:hover    { background: var(--gold-light); }
+    .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ── SPLIT PANELS (Content + Campaign) ── */
+    #content-section,
+    #campaign-section {
+      height: calc(100vh - 113px);
+    }
+
+    .split { display: flex; height: 100%; }
+
+    .pane {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .pane-left {
+      width: 340px;
+      min-width: 300px;
+      border-right: 1px solid var(--border);
+      background: var(--bg-card);
+      overflow-y: auto;
+      padding: 24px;
+    }
+    .pane-right {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 28px;
+    }
+
+    .pane-title {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 2.5px;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 22px;
+    }
+
+    /* Form elements */
+    .fg { margin-bottom: 16px; }
+    .fl {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .fi, .fs, .fta {
+      width: 100%;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 12px;
+      color: var(--text);
+      font-size: 13px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .fi:focus, .fs:focus, .fta:focus { border-color: var(--gold); }
+    .fs { appearance: none; cursor: pointer; }
+    .fs option { background: #1a1a1a; }
+    .fta { resize: vertical; min-height: 72px; line-height: 1.5; }
+    .fi::placeholder, .fta::placeholder { color: #555; }
+
+    .gen-btn {
+      width: 100%;
+      padding: 12px;
+      background: var(--gold);
+      border: none;
+      border-radius: 7px;
+      color: #000;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      letter-spacing: 0.6px;
+      transition: background 0.2s;
+      margin-top: 6px;
+      font-family: inherit;
+    }
+    .gen-btn:hover    { background: var(--gold-light); }
+    .gen-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* Output */
+    .out-placeholder {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 300px;
+      border: 1px dashed var(--border-hover);
+      border-radius: 10px;
+      text-align: center;
+      padding: 40px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.7;
+      gap: 10px;
+    }
+    .out-placeholder .icon { font-size: 32px; opacity: 0.5; }
+
+    .out-box {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 22px;
+      font-size: 14px;
+      line-height: 1.75;
+      white-space: pre-wrap;
+      word-break: break-word;
+      min-height: 200px;
+      animation: fadeUp 0.2s ease;
+    }
+
+    .out-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 14px;
+    }
+    .act-btn {
+      padding: 7px 16px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 12px;
+      color: var(--muted);
+      cursor: pointer;
+      background: transparent;
+      font-family: inherit;
+      transition: all 0.18s;
+    }
+    .act-btn:hover {
+      border-color: var(--gold);
+      color: var(--gold);
+    }
+    .act-btn.primary {
+      background: var(--gold-dim);
+      border-color: var(--gold);
+      color: var(--gold);
+    }
+
+    /* Scrollbars */
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border-hover); border-radius: 3px; }
+
+    /* Generating indicator */
+    .generating {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--gold);
+      margin-bottom: 10px;
+    }
+    .gen-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--gold);
+      animation: pulse 1s infinite;
+    }
+  </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="header">
+  <div class="logo">DST</div>
+  <div class="header-brand">
+    <div class="header-name">Dead Sea Treasures</div>
+    <div class="header-sub">AI Marketing Agent</div>
+  </div>
+  <div class="header-status">
+    <div class="status-dot"></div>
+    Powered by Claude
+  </div>
+</header>
+
+<!-- TABS -->
+<nav class="tabs">
+  <div class="tab active" onclick="switchTab('chat')">💬 Beauty Advisor</div>
+  <div class="tab" onclick="switchTab('content')">✨ Content Studio</div>
+  <div class="tab" onclick="switchTab('campaign')">📊 Campaign Planner</div>
+</nav>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- BEAUTY ADVISOR                                         -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<section id="chat-section" class="section active">
+  <div class="chat-messages" id="chatMessages">
+    <div class="msg ai">
+      <div class="msg-label">Layla · DST Beauty Advisor</div>
+      <div class="msg-bubble welcome-bubble">
+        <div class="welcome-title">Marhaba! I'm <span class="gold">Layla</span>, your DST Beauty Advisor 🌿</div>
+        <div class="welcome-body">I can help you build personalized skincare routines, recommend products for your skin type, and explain the science behind Dead Sea minerals — in English or Arabic. What can I help you with today?</div>
+        <div class="mineral-strip">
+          <span class="mineral-tag">421m Depth</span>
+          <span class="mineral-tag">26 Minerals</span>
+          <span class="mineral-tag">10× Ocean</span>
+          <span class="mineral-tag">100% Natural</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="quick-bar">
+    <button class="quick" onclick="quickSend('Build me a complete morning skincare routine')">🌅 Morning Routine</button>
+    <button class="quick" onclick="quickSend('I have dry skin, what DST products should I use?')">💧 Dry Skin Help</button>
+    <button class="quick" onclick="quickSend('What makes Dead Sea minerals special? Explain the 26 minerals.')">🧪 Why Dead Sea?</button>
+    <button class="quick" onclick="quickSend('What products do you have for men\'s skincare?')">👤 Men's Skincare</button>
+    <button class="quick" onclick="quickSend('ساعدني في بناء روتين عناية بالبشرة مناسب للبشرة الجافة')">🌙 روتين عربي</button>
+  </div>
+
+  <div class="chat-input-row">
+    <textarea
+      id="chatInput"
+      class="chat-input"
+      placeholder="Ask about skincare, routines, or Dead Sea minerals…"
+      rows="1"
+      onkeydown="onKey(event)"
+      oninput="resize(this)"
+    ></textarea>
+    <button class="send-btn" id="sendBtn" onclick="sendMsg()">↑</button>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- CONTENT STUDIO                                         -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<section id="content-section" class="section">
+  <div class="split">
+    <div class="pane pane-left">
+      <div class="pane-title">Content Studio</div>
+
+      <div class="fg">
+        <label class="fl">Platform</label>
+        <select class="fs" id="cPlatform">
+          <option>Instagram</option>
+          <option>TikTok</option>
+          <option>Facebook</option>
+          <option>Twitter / X</option>
+          <option>LinkedIn</option>
+        </select>
+      </div>
+
+      <div class="fg">
+        <label class="fl">Content Type</label>
+        <select class="fs" id="cType">
+          <option>Product Showcase</option>
+          <option>Dead Sea Education</option>
+          <option>Skincare Routine / How-To</option>
+          <option>Behind the Scenes</option>
+          <option>Social Proof / Testimonial</option>
+          <option>Seasonal / Campaign</option>
+        </select>
+      </div>
+
+      <div class="fg">
+        <label class="fl">Product / Topic</label>
+        <input class="fi" id="cProduct" placeholder="e.g. Dead Sea Mud Mask, Morning Ritual…">
+      </div>
+
+      <div class="fg">
+        <label class="fl">Language</label>
+        <select class="fs" id="cLang">
+          <option>English</option>
+          <option>Arabic</option>
+          <option>Both (English + Arabic)</option>
+        </select>
+      </div>
+
+      <div class="fg">
+        <label class="fl">Notes / Angle</label>
+        <textarea class="fta" id="cNotes" placeholder="Any campaign tie-in, tone guidance, or special focus…"></textarea>
+      </div>
+
+      <button class="gen-btn" id="cBtn" onclick="genContent()">Generate Content →</button>
+    </div>
+
+    <div class="pane pane-right">
+      <div class="pane-title">Generated Content</div>
+      <div id="cOutput">
+        <div class="out-placeholder">
+          <span class="icon">✨</span>
+          <span>Select your options and click <strong>Generate Content</strong> to create platform-ready posts for Dead Sea Treasures.</span>
+        </div>
+      </div>
+      <div class="out-actions" id="cActions" style="display:none">
+        <button class="act-btn" onclick="copyOut('cText')">Copy</button>
+        <button class="act-btn primary" onclick="genContent()">Regenerate</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- CAMPAIGN PLANNER                                       -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<section id="campaign-section" class="section">
+  <div class="split">
+    <div class="pane pane-left">
+      <div class="pane-title">Campaign Planner</div>
+
+      <div class="fg">
+        <label class="fl">Plan Type</label>
+        <select class="fs" id="pType">
+          <option>Monthly Content Calendar</option>
+          <option>Paid Ad Campaign (Meta / TikTok)</option>
+          <option>Influencer Outreach Brief</option>
+          <option>Email Marketing Flow</option>
+          <option>Seasonal Campaign</option>
+          <option>Full Marketing Strategy</option>
+        </select>
+      </div>
+
+      <div class="fg">
+        <label class="fl">Timeframe</label>
+        <input class="fi" id="pTime" placeholder="e.g. April 2026, Q2 2026, Next 30 days">
+      </div>
+
+      <div class="fg">
+        <label class="fl">Monthly Budget</label>
+        <select class="fs" id="pBudget">
+          <option>$500/month</option>
+          <option>$750/month</option>
+          <option>$1,000/month</option>
+          <option>$1,500/month</option>
+          <option>$2,000/month</option>
+        </select>
+      </div>
+
+      <div class="fg">
+        <label class="fl">Goals</label>
+        <textarea class="fta" id="pGoals" placeholder="e.g. Grow Instagram to 10K, drive website sales, launch mud mask…"></textarea>
+      </div>
+
+      <div class="fg">
+        <label class="fl">Focus / Notes</label>
+        <textarea class="fta" id="pFocus" placeholder="e.g. GCC market, Ramadan campaign, Body line launch, influencer seeding…"></textarea>
+      </div>
+
+      <button class="gen-btn" id="pBtn" onclick="genCampaign()">Generate Plan →</button>
+    </div>
+
+    <div class="pane pane-right">
+      <div class="pane-title">Marketing Plan</div>
+      <div id="pOutput">
+        <div class="out-placeholder">
+          <span class="icon">📊</span>
+          <span>Define your parameters and generate a detailed, actionable marketing plan built around Dead Sea Treasures.</span>
+        </div>
+      </div>
+      <div class="out-actions" id="pActions" style="display:none">
+        <button class="act-btn" onclick="copyOut('pText')">Copy</button>
+        <button class="act-btn primary" onclick="genCampaign()">Regenerate</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- JAVASCRIPT                                             -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<script>
+// ── STATE ────────────────────────────────────────────────
+const history = [];   // chat conversation history
+let busy = false;
+
+// ── TABS ─────────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    t.classList.toggle('active', ['chat','content','campaign'][i] === name);
+  });
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.getElementById(name + '-section').classList.add('active');
+}
+
+// ── CHAT ─────────────────────────────────────────────────
+function resize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+
+function onKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(); }
+}
+
+function quickSend(text) {
+  document.getElementById('chatInput').value = text;
+  sendMsg();
+}
+
+function appendMsg(role, text) {
+  const wrap = document.getElementById('chatMessages');
+  const div = document.createElement('div');
+  div.className = 'msg ' + (role === 'user' ? 'user' : 'ai');
+
+  const lbl = document.createElement('div');
+  lbl.className = 'msg-label';
+  lbl.textContent = role === 'user' ? 'You' : 'Layla · DST Beauty Advisor';
+
+  const bbl = document.createElement('div');
+  bbl.className = 'msg-bubble';
+  bbl.textContent = text;
+
+  div.appendChild(lbl);
+  div.appendChild(bbl);
+  wrap.appendChild(div);
+  wrap.scrollTop = wrap.scrollHeight;
+  return bbl;
+}
+
+function addTyping() {
+  const wrap = document.getElementById('chatMessages');
+  const div = document.createElement('div');
+  div.className = 'msg ai';
+  div.id = 'typing';
+
+  const lbl = document.createElement('div');
+  lbl.className = 'msg-label';
+  lbl.textContent = 'Layla · DST Beauty Advisor';
+
+  const bbl = document.createElement('div');
+  bbl.innerHTML = '<div class="typing-dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>';
+
+  div.appendChild(lbl);
+  div.appendChild(bbl);
+  wrap.appendChild(div);
+  wrap.scrollTop = wrap.scrollHeight;
+}
+
+async function sendMsg() {
+  if (busy) return;
+  const inp = document.getElementById('chatInput');
+  const text = inp.value.trim();
+  if (!text) return;
+
+  inp.value = '';
+  inp.style.height = 'auto';
+  history.push({ role: 'user', content: text });
+  appendMsg('user', text);
+
+  busy = true;
+  document.getElementById('sendBtn').disabled = true;
+  addTyping();
+
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: history })
+    });
+
+    document.getElementById('typing')?.remove();
+    const bubble = appendMsg('ai', '');
+    let full = '';
+
+    await readStream(res, chunk => {
+      full += chunk;
+      bubble.textContent = full;
+      document.getElementById('chatMessages').scrollTop =
+        document.getElementById('chatMessages').scrollHeight;
+    });
+
+    history.push({ role: 'assistant', content: full });
+  } catch (e) {
+    document.getElementById('typing')?.remove();
+    appendMsg('ai', 'Something went wrong. Please make sure your API key is set and try again.');
+  }
+
+  busy = false;
+  document.getElementById('sendBtn').disabled = false;
+}
+
+// ── CONTENT STUDIO ───────────────────────────────────────
+async function genContent() {
+  const btn = document.getElementById('cBtn');
+  btn.disabled = true;
+  btn.textContent = 'Generating…';
+
+  const outDiv = document.getElementById('cOutput');
+  outDiv.innerHTML = '<div class="generating"><div class="gen-dot"></div> Writing content…</div><div class="out-box" id="cText"></div>';
+
+  const payload = {
+    platform:      document.getElementById('cPlatform').value,
+    content_type:  document.getElementById('cType').value,
+    product:       document.getElementById('cProduct').value,
+    language:      document.getElementById('cLang').value,
+    extra:         document.getElementById('cNotes').value
+  };
+
+  try {
+    const res = await fetch('/api/content', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    const el = document.getElementById('cText');
+    let full = '';
+    await readStream(res, chunk => {
+      full += chunk;
+      el.textContent = full;
+    });
+
+    outDiv.querySelector('.generating')?.remove();
+    document.getElementById('cActions').style.display = 'flex';
+  } catch (e) {
+    outDiv.innerHTML = `<div class="out-box" style="color:#f87171">⚠️ Error: ${e.message}</div>`;
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Generate Content →';
+}
+
+// ── CAMPAIGN PLANNER ─────────────────────────────────────
+async function genCampaign() {
+  const btn = document.getElementById('pBtn');
+  btn.disabled = true;
+  btn.textContent = 'Generating…';
+
+  const outDiv = document.getElementById('pOutput');
+  outDiv.innerHTML = '<div class="generating"><div class="gen-dot"></div> Building your marketing plan…</div><div class="out-box" id="pText"></div>';
+
+  const payload = {
+    campaign_type: document.getElementById('pType').value,
+    timeframe:     document.getElementById('pTime').value,
+    budget:        document.getElementById('pBudget').value,
+    goals:         document.getElementById('pGoals').value,
+    focus:         document.getElementById('pFocus').value
+  };
+
+  try {
+    const res = await fetch('/api/campaign', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    const el = document.getElementById('pText');
+    let full = '';
+    await readStream(res, chunk => {
+      full += chunk;
+      el.textContent = full;
+    });
+
+    outDiv.querySelector('.generating')?.remove();
+    document.getElementById('pActions').style.display = 'flex';
+  } catch (e) {
+    outDiv.innerHTML = `<div class="out-box" style="color:#f87171">⚠️ Error: ${e.message}</div>`;
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Generate Plan →';
+}
+
+// ── SHARED STREAM READER ─────────────────────────────────
+async function readStream(response, onChunk) {
+  // If server returned an error status, surface it
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Server error ${response.status}: ${text}`);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop(); // keep incomplete last line
+
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const raw = line.slice(6).trim();
+      if (raw === '[DONE]') return;
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed.error) throw new Error(parsed.error);
+        if (parsed.text) onChunk(parsed.text);
+      } catch (e) {
+        if (e.message && !e.message.startsWith('{')) throw e;
+      }
+    }
+  }
+}
+
+// ── COPY ─────────────────────────────────────────────────
+function copyOut(elId) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  navigator.clipboard.writeText(el.textContent).then(() => {
+    const btn = document.querySelector(`[onclick="copyOut('${elId}')"]`);
+    if (btn) { btn.textContent = 'Copied!'; setTimeout(() => btn.textContent = 'Copy', 2200); }
+  });
+}
+</script>
+</body>
+</html>
