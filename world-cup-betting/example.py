@@ -73,6 +73,12 @@ def main():
         "Under 2.5": 1.75,
         "BTTS Yes": 2.05,
         "BTTS No": 1.78,
+        # Secondary markets
+        "DC 1X": 1.18,            # double chance: home or draw
+        "DNB Home": 1.32,         # draw-no-bet on the home side
+        "AH Home -1.0": 1.95,     # Asian handicap (push refunds on a 1-goal win)
+        "AH Away +1.5": 1.50,
+        "CS 2-0": 7.50,           # correct score
     }
 
     probs, bets = analyze_match(home, away, book_odds=book_odds, neutral=True)

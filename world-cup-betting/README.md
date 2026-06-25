@@ -93,6 +93,24 @@ The two lambdas feed independent Poisson distributions to build a grid of
 - Both teams to score (BTTS)
 - Most-likely scorelines
 
+### 5b. Markets covered
+
+Everything below is derived from the same scoreline grid, so the prices are
+internally consistent:
+
+- **1X2** — home / draw / away
+- **Double chance** — `DC 1X`, `DC 12`, `DC X2`
+- **Draw-no-bet** — `DNB Home`, `DNB Away` (stake refunded on a draw)
+- **Totals** — `Over/Under` at 0.5, 1.5, 2.5, 3.5, 4.5
+- **BTTS** — both teams to score, yes / no
+- **Correct score** — `CS 2-0`, `CS 1-1`, … (top scorelines)
+- **Asian handicap** — `AH Home -1.0`, `AH Away +0.5`, quarter lines like
+  `AH Home -0.75`; pushes (stake refunded) are handled correctly in the EV and
+  Kelly math
+
+To evaluate any of these, just add the key with the bookmaker's decimal odds to
+`book_odds` (see `example.py`).
+
 ### 6. Betting layer — value & staking
 
 Each model probability is compared to the bookmaker's decimal odds:
@@ -140,6 +158,45 @@ Betting knobs (`evaluate_bets`): `edge_threshold` (0.03), `kelly_fraction`
 
 See `example.py` for a complete worked fixture.
 
+## Batch a whole matchday from CSV
+
+Instead of editing Python, keep your teams and fixtures in spreadsheets:
+
+- **`teams.csv`** — one row per team: `elo, attack, defense, style`, the
+  underlying stats (`shots_for, sot_for, big_for, offsides_for, possession,
+  shots_against, sot_against, big_against, tackles, interceptions`), and an
+  optional `form` column written as `2-0@1850;1-0@1900;0-0` (goals for-against,
+  optional `@opponentElo`, most recent first).
+- **`fixtures.csv`** — one row per match: `home, away, neutral` plus odds
+  columns (`home_win, draw, away_win, over25, under25, btts_yes, btts_no,
+  dc_1x, dc_12, dc_x2, dnb_home, dnb_away`). Leave any odds cell blank to skip
+  that market.
+
+```bash
+python3 batch.py                 # uses teams.csv + fixtures.csv
+python3 batch.py teams.csv my_saturday.csv
+```
+
+It prints each fixture's probabilities and value bets, then a **matchday value
+board** ranking every +EV bet across the slate by edge.
+
+## Simulate the whole tournament
+
+`simulate.py` runs a Monte-Carlo of the entire World Cup — group stage round
+robins, then a seeded knockout bracket — sampling each match's scoreline from
+the model. It reports each team's chance of advancing, reaching each round, and
+winning the title, with **fair outright odds** you can compare to the futures
+market.
+
+```bash
+python3 simulate.py            # 10,000 simulations from teams.csv + groups.csv
+python3 simulate.py 50000      # more sims = tighter estimates
+```
+
+`groups.csv` holds the draw (`group, team`); knockouts use extra time and a
+slight Elo-weighted edge on penalties. It supports 4 groups of 4 (→ quarters)
+or 8 groups of 4 (→ round of 16).
+
 ### Using it with Stake (decimal odds)
 
 The model works directly with **decimal odds**, which is Stake's default display
@@ -150,8 +207,12 @@ to *Decimal* in settings first.) The market names map cleanly:
 | `book_odds` key | Stake market |
 |-----------------|--------------|
 | `Home win` / `Draw` / `Away win` | Match Result / 1X2 (Full Time) |
-| `Over 2.5` / `Under 2.5` | Total Goals Over/Under 2.5 |
+| `DC 1X` / `DC 12` / `DC X2` | Double Chance |
+| `DNB Home` / `DNB Away` | Draw No Bet |
+| `Over/Under 2.5` (and 0.5–4.5) | Total Goals Over/Under |
 | `BTTS Yes` / `BTTS No` | Both Teams To Score |
+| `CS 2-0`, `CS 1-1`, … | Correct Score |
+| `AH Home -1.0`, `AH Away +0.5` | Asian Handicap |
 
 Use the **Full Time / 90-minute** market lines (not including extra time) so
 they match the model, which predicts regulation-time goals. The model does not

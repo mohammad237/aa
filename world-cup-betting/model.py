@@ -420,6 +420,30 @@ class MatchProbabilities:
     lambda_home: float
     lambda_away: float
     top_scores: List[Tuple[str, float]]
+    grid: List[List[float]] = field(default_factory=list)
+
+    # --- Derived secondary markets (computed from the grid) ----------------- #
+    @property
+    def double_chance_1x(self) -> float:   # home win or draw
+        return self.home_win + self.draw
+
+    @property
+    def double_chance_12(self) -> float:   # either team wins (no draw)
+        return self.home_win + self.away_win
+
+    @property
+    def double_chance_x2(self) -> float:   # away win or draw
+        return self.away_win + self.draw
+
+    @property
+    def dnb_home(self) -> float:           # draw-no-bet: stake refunded on draw
+        denom = self.home_win + self.away_win
+        return self.home_win / denom if denom else 0.0
+
+    @property
+    def dnb_away(self) -> float:
+        denom = self.home_win + self.away_win
+        return self.away_win / denom if denom else 0.0
 
 
 def match_probabilities(
@@ -459,7 +483,72 @@ def match_probabilities(
         lambda_home=lam_h,
         lambda_away=lam_a,
         top_scores=scores[:5],
+        grid=grid,
     )
+
+
+# --------------------------------------------------------------------------- #
+# Secondary markets computed from the scoreline grid.
+# --------------------------------------------------------------------------- #
+
+def total_goals_prob(grid: List[List[float]], line: float, over: bool) -> float:
+    """P(total goals over/under `line`). Use .5 lines to avoid pushes."""
+    p = 0.0
+    for i in range(len(grid)):
+        for j in range(len(grid[i])):
+            total = i + j
+            if (over and total > line) or (not over and total < line):
+                p += grid[i][j]
+    return p
+
+
+def correct_score_probs(
+    grid: List[List[float]], top_n: int = 8
+) -> List[Tuple[str, float]]:
+    """All correct-score probabilities, sorted, truncated to top_n."""
+    scores = [
+        (f"{i}-{j}", grid[i][j])
+        for i in range(len(grid))
+        for j in range(len(grid[i]))
+    ]
+    scores.sort(key=lambda s: s[1], reverse=True)
+    return scores[:top_n]
+
+
+def asian_handicap_outcomes(
+    grid: List[List[float]], line: float, side: str = "home"
+) -> Tuple[float, float, float]:
+    """
+    Probabilities of (win, push, loss) when backing one side at an Asian
+    handicap `line` (the handicap added to that side's goals). Handles half,
+    whole, and quarter lines. `side` is "home" or "away".
+
+    Example: side="home", line=-1.0  -> home must win by 2+ to win, by exactly
+    1 is a push (stake refunded), otherwise loss.
+    """
+    # Quarter lines (e.g. -0.75) split the stake across the two neighbouring
+    # half/whole lines.
+    frac = round(abs(line) * 4) % 4
+    if frac in (1, 3):  # quarter line
+        lo = math.floor(line * 2) / 2
+        hi = math.ceil(line * 2) / 2
+        w1, p1, l1 = asian_handicap_outcomes(grid, lo, side)
+        w2, p2, l2 = asian_handicap_outcomes(grid, hi, side)
+        return ((w1 + w2) / 2, (p1 + p2) / 2, (l1 + l2) / 2)
+
+    win = push = loss = 0.0
+    for i in range(len(grid)):
+        for j in range(len(grid[i])):
+            p = grid[i][j]
+            margin = (i - j) if side == "home" else (j - i)
+            adjusted = margin + line
+            if adjusted > 1e-9:
+                win += p
+            elif adjusted < -1e-9:
+                loss += p
+            else:
+                push += p
+    return win, push, loss
 
 
 # --------------------------------------------------------------------------- #
@@ -507,11 +596,39 @@ def evaluate_bets(
         "Under 2.5": probs.under_2_5,
         "BTTS Yes": probs.btts_yes,
         "BTTS No": probs.btts_no,
+        # Double chance
+        "DC 1X": probs.double_chance_1x,
+        "DC 12": probs.double_chance_12,
+        "DC X2": probs.double_chance_x2,
+        # Draw-no-bet (push refunds handled by the conditional probability)
+        "DNB Home": probs.dnb_home,
+        "DNB Away": probs.dnb_away,
     }
+    # Extra totals lines straight off the grid (e.g. "Over 1.5", "Under 3.5").
+    if probs.grid:
+        for line in (0.5, 1.5, 3.5, 4.5):
+            market_probs[f"Over {line}"] = total_goals_prob(probs.grid, line, True)
+            market_probs[f"Under {line}"] = total_goals_prob(probs.grid, line, False)
+        # Correct-score markets, keyed "CS i-j".
+        for score, p in correct_score_probs(probs.grid, top_n=12):
+            market_probs[f"CS {score}"] = p
 
     bets: List[ValueBet] = []
     for market, odds in book_odds.items():
-        if market not in market_probs or odds <= 1.0:
+        if odds <= 1.0:
+            continue
+
+        # Asian handicap markets are evaluated separately because of pushes.
+        if market.startswith("AH "):
+            ah = _evaluate_asian_handicap(
+                probs.grid, market, odds, edge_threshold,
+                kelly_fraction, max_stake,
+            )
+            if ah:
+                bets.append(ah)
+            continue
+
+        if market not in market_probs:
             continue
         p = market_probs[market]
         edge = p * odds - 1.0
@@ -531,6 +648,53 @@ def evaluate_bets(
         )
     bets.sort(key=lambda b: b.edge, reverse=True)
     return bets
+
+
+def _evaluate_asian_handicap(
+    grid: List[List[float]],
+    market: str,
+    odds: float,
+    edge_threshold: float,
+    kelly_fraction: float,
+    max_stake: float,
+) -> Optional[ValueBet]:
+    """
+    Evaluate an Asian-handicap bet keyed like "AH Home -1.0" / "AH Away +0.5".
+
+    A push refunds the stake, so the expected value of a unit stake is:
+        EV = p_win * (odds - 1) + p_push * 0 - p_loss * 1
+    and the edge (profit per unit) is EV. We convert the win/push split into an
+    effective probability so Kelly staking still applies.
+    """
+    if not grid:
+        return None
+    parts = market.split()
+    if len(parts) != 3:
+        return None
+    side = parts[1].lower()
+    try:
+        line = float(parts[2])
+    except ValueError:
+        return None
+    if side not in ("home", "away"):
+        return None
+
+    p_win, p_push, p_loss = asian_handicap_outcomes(grid, line, side)
+    edge = p_win * (odds - 1.0) - p_loss          # = EV per unit staked
+    if edge <= edge_threshold:
+        return None
+    # Effective win prob for a push-refunding bet: solve p_eff*odds - 1 = edge.
+    p_eff = (edge + 1.0) / odds
+    full_kelly = edge / (odds - 1.0)
+    stake = max(0.0, min(max_stake, full_kelly * kelly_fraction))
+    return ValueBet(
+        market=market,
+        model_prob=p_eff,
+        fair_odds=fair_odds(p_eff),
+        book_odds=odds,
+        edge=edge,
+        kelly_stake=stake,
+    )
 
 
 # --------------------------------------------------------------------------- #
