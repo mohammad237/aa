@@ -216,6 +216,37 @@ is derived from goal difference; swap in FIFA / World-Football-Elo numbers if yo
 have them). Without a key the script explains how to get one and exits cleanly;
 network calls go through the environment proxy and never disable TLS.
 
+## Backtest the strategy
+
+`backtest.py` replays the model over historical matches to check whether the
+"edges" actually hold up. Give it `results.csv` (fixtures + actual
+`home_goals`/`away_goals` + the odds you could have taken), and for every match
+it places the value bets the model would have flagged, settles them against the
+real score, and reports:
+
+```bash
+python3 backtest.py               # teams.csv + results.csv
+python3 backtest.py teams.csv history.csv
+```
+
+- **ROI (flat stake)** — profit per unit, 1 unit on every value bet
+- **ROI (Kelly)** — bankroll growth using the model's fractional-Kelly stakes
+- **Hit rate** — share of settled bets that won (pushes excluded)
+- **Brier score** — probability calibration error (0.25 = a coin flip; lower is
+  better)
+- **Reliability table** — predicted vs actual win-rate, bucketed, so you can see
+  if e.g. your "60%" bets actually win ~60%
+- **Closing-line value** — if `results.csv` has `*_close` odds columns, whether
+  you beat the closing price (the single best predictor of a real long-term edge)
+
+Add `home_goals`/`away_goals` to mark a match as played; rows without a result
+are skipped, so the same file can hold both upcoming and finished fixtures.
+
+> ⚠️ **Look-ahead caveat.** The backtest uses the *current* `teams.csv` ratings
+> for every past match. For an honest test, feed ratings/form *as they were
+> before* each match (point-in-time). Treat the built-in run as a pipeline
+> sanity check, not proof of a live edge.
+
 ## Simulate the whole tournament
 
 `simulate.py` runs a Monte-Carlo of the entire World Cup — group stage round
