@@ -114,7 +114,9 @@ def main() -> None:
     cols = ["date", "home", "away", "neutral", "importance",
             "home_goals", "away_goals",
             "home_win", "draw", "away_win",
-            "over25", "under25", "btts_yes", "btts_no"]
+            "over25", "under25", "btts_yes", "btts_no",
+            "home_win_close", "draw_close", "away_win_close",
+            "over25_close", "under25_close", "btts_yes_close", "btts_no_close"]
     out: List[str] = [",".join(cols)]
 
     # A schedule: several "windows", each a random round-robin-ish slate.
@@ -130,10 +132,14 @@ def main() -> None:
             # Results follow the TRUE process (with home advantage)...
             lam_h, lam_a = true_lambdas(home, away, neutral=neutral)
             hg, ag = sample_poisson(lam_h), sample_poisson(lam_a)
-            # ...but the bookmaker prices the game as if it were neutral,
+            # ...but the bookmaker OPENS the line as if the game were neutral,
             # leaving exploitable value for a model that accounts for venue.
             blam_h, blam_a = true_lambdas(home, away, neutral=True)
             mp = fair_market_probs(blam_h, blam_a)
+            # By CLOSE, sharp money has corrected the line toward the true
+            # (venue-aware) probabilities. So a bet taken at the soft opener
+            # should, on average, beat the closing price -> positive CLV.
+            cp = fair_market_probs(lam_h, lam_a)
             row = [
                 f"{year:04d}-{month:02d}-{day:02d}", home, away,
                 "1" if neutral else "0", f"{importance:.1f}",
@@ -141,6 +147,9 @@ def main() -> None:
                 priced(mp["home_win"]), priced(mp["draw"]), priced(mp["away_win"]),
                 priced(mp["over25"]), priced(mp["under25"]),
                 priced(mp["btts_yes"]), priced(mp["btts_no"]),
+                priced(cp["home_win"]), priced(cp["draw"]), priced(cp["away_win"]),
+                priced(cp["over25"]), priced(cp["under25"]),
+                priced(cp["btts_yes"]), priced(cp["btts_no"]),
             ]
             out.append(",".join(row))
         # advance the calendar ~3 weeks

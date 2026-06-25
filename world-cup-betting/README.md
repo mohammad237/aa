@@ -269,6 +269,30 @@ untouched test window — because the planted home-advantage edge is real and
 persistent. If a train edge is just noise, the test window exposes it and the
 script tells you not to bet it.
 
+**5. Expanding-window cross-validation (`crossval.py`).** One split is one roll
+of the dice. This re-calibrates before each of several sequential test folds
+(train on everything so far → bet the next unseen block → repeat) and pools
+*every* out-of-sample bet into one honest figure — exactly how you'd run it live,
+recalibrating periodically and betting forward.
+
+```bash
+python3 crossval.py                 # 4 expanding-window folds
+python3 crossval.py history.csv styles.csv 5
+```
+
+On the sample it pools to roughly **+17% ROI and +4% CLV (beating the close ~68%
+of the time)** across folds, with stable chosen parameters — and it still has
+losing folds, which is the point: it shows you the variance instead of hiding it.
+
+**6. Closing-line value (CLV).** `walkforward.py` (and the CV) report CLV when
+the data has `*_close` odds columns: the average % by which the price you took
+beat the closing price, and how often. CLV is the single best *leading* indicator
+of a real edge because it doesn't depend on whether a particular bet won —
+beating the close consistently means you are systematically ahead of the market,
+and profit follows over a large enough sample. In the sample, value bets beat the
+close ~67% of the time, since the model captures the home advantage the line only
+corrects for by close.
+
 On the bundled sample (where the synthetic bookmaker ignores home advantage —
 a real soft-book weakness), the contrast is stark:
 

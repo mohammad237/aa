@@ -55,10 +55,11 @@ def load_history(path: str) -> List[dict]:
     return rows
 
 
-def _odds(row: dict) -> Dict[str, float]:
+def _odds(row: dict, suffix: str = "") -> Dict[str, float]:
+    """Parse odds columns into {market: decimal}. suffix='_close' for closing."""
     book: Dict[str, float] = {}
     for col, market in ODDS_COLUMNS.items():
-        v = row.get(col, "")
+        v = row.get(col + suffix, "")
         if v not in (None, "") and str(v).strip():
             try:
                 book[market] = float(v)
@@ -86,6 +87,9 @@ def run(history_path: str, styles_path: str,
     brier_n = 0
     buckets: Dict[int, List[int]] = defaultdict(list)
     by_market: Dict[str, List[float]] = defaultdict(list)
+    clv_sum = 0.0
+    clv_n = 0
+    clv_beat = 0   # bets whose taken price beat the close
 
     for idx, row in enumerate(history):
         home, away = row["home"].strip(), row["away"].strip()
@@ -101,6 +105,7 @@ def run(history_path: str, styles_path: str,
                   engine.games_played(home) >= min_games and
                   engine.games_played(away) >= min_games and idx >= warmup)
         book = _odds(row)
+        close = _odds(row, suffix="_close")
 
         if enough and book:
             home_t = engine.as_of_team(home)
@@ -129,6 +134,13 @@ def run(history_path: str, styles_path: str,
                     brier_sum += (b.model_prob - outcome) ** 2
                     brier_n += 1
                     buckets[int(min(0.999, b.model_prob) * 10)].append(outcome)
+                # Closing-line value: did the price we took beat the close?
+                c = close.get(b.market)
+                if c and c > 1.0:
+                    clv_sum += (b.book_odds / c - 1.0)
+                    clv_n += 1
+                    if b.book_odds > c:
+                        clv_beat += 1
         elif book and in_window:
             skipped_warmup += 1
 
@@ -143,6 +155,9 @@ def run(history_path: str, styles_path: str,
         "hit": (wins / settled) if settled else 0.0,
         "bankroll": bankroll,
         "brier": (brier_sum / brier_n) if brier_n else None,
+        "clv": (clv_sum / clv_n) if clv_n else None,
+        "clv_beat_rate": (clv_beat / clv_n) if clv_n else None,
+        "clv_n": clv_n,
     }
     if quiet:
         return metrics
@@ -169,6 +184,12 @@ def run(history_path: str, styles_path: str,
         if brier_n:
             print(f"  Brier score       : {brier_sum/brier_n:.4f}  "
                   f"(0.25 = coin-flip; lower is better)")
+        if clv_n:
+            print(f"  Closing-line value: {clv_sum/clv_n:+.2%} avg, "
+                  f"beat close {clv_beat/clv_n:.0%} of the time "
+                  f"({clv_n} bets priced)")
+            print("    (CLV is the best leading indicator of a real edge — it "
+                  "holds even on bets that lost.)")
 
         print("\n  ROI by market:")
         for mkt, pls in sorted(by_market.items(),
