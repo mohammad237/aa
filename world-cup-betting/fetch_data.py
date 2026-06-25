@@ -214,17 +214,98 @@ CSV_COLUMNS = [
     "interceptions", "form",
 ]
 
+HISTORY_COLUMNS = [
+    "date", "home", "away", "neutral", "importance",
+    "home_goals", "away_goals",
+    "home_win", "draw", "away_win", "over25", "under25", "btts_yes", "btts_no",
+]
+
+
+# --------------------------------------------------------------------------- #
+# History mode: build history.csv (results + odds) for the no-look-ahead tools.
+# --------------------------------------------------------------------------- #
+
+def _odds_from_response(resp: list) -> Dict[str, str]:
+    """
+    Pull 1X2 / Over-Under 2.5 / BTTS odds out of an /odds API response, using
+    the first bookmaker that offers them. Returns {column: odds_string}.
+    """
+    out: Dict[str, str] = {}
+    for item in resp:
+        for bk in item.get("bookmakers", []):
+            for bet in bk.get("bets", []):
+                name = bet.get("name", "")
+                vals = {v.get("value"): v.get("odd") for v in bet.get("values", [])}
+                if name == "Match Winner":
+                    out.setdefault("home_win", vals.get("Home"))
+                    out.setdefault("draw", vals.get("Draw"))
+                    out.setdefault("away_win", vals.get("Away"))
+                elif name == "Goals Over/Under":
+                    out.setdefault("over25", vals.get("Over 2.5"))
+                    out.setdefault("under25", vals.get("Under 2.5"))
+                elif name == "Both Teams Score":
+                    out.setdefault("btts_yes", vals.get("Yes"))
+                    out.setdefault("btts_no", vals.get("No"))
+            if {"home_win", "over25", "btts_yes"} & set(out):
+                break
+    return {k: v for k, v in out.items() if v}
+
+
+def build_history(league: int, season: int, key: str, host: str,
+                  neutral: bool, limit: int, with_odds: bool,
+                  pause: float = 0.3) -> List[dict]:
+    data = _api_get("fixtures", {"league": league, "season": season},
+                    key, host)
+    fixtures = data.get("response", [])
+    rows: List[dict] = []
+    for fx in fixtures:
+        status = fx["fixture"]["status"]["short"]
+        goals = fx["goals"]
+        if status not in ("FT", "AET", "PEN") or goals["home"] is None:
+            continue  # not finished
+        teams = fx["teams"]
+        row = {
+            "date": fx["fixture"]["date"][:10],
+            "home": teams["home"]["name"],
+            "away": teams["away"]["name"],
+            "neutral": "1" if neutral else "0",
+            "importance": "1.0",
+            "home_goals": goals["home"],
+            "away_goals": goals["away"],
+        }
+        if with_odds:
+            try:
+                od = _api_get("odds", {"fixture": fx["fixture"]["id"]},
+                              key, host)
+                row.update(_odds_from_response(od.get("response", [])))
+                time.sleep(pause)
+            except APIError:
+                pass
+        rows.append(row)
+        if limit and len(rows) >= limit:
+            break
+    rows.sort(key=lambda r: r["date"])
+    return rows
+
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Auto-fill teams.csv from API-Football")
-    ap.add_argument("--teams", required=True,
-                    help="comma-separated team names")
+    ap = argparse.ArgumentParser(
+        description="Fetch data from API-Football (teams.csv or history.csv)")
+    ap.add_argument("--mode", choices=["team", "history"], default="team",
+                    help="'team' fills teams.csv; 'history' builds history.csv")
+    ap.add_argument("--teams", help="(team mode) comma-separated team names")
     ap.add_argument("--league", type=int, default=1,
                     help="league id (World Cup = 1)")
     ap.add_argument("--season", type=int, default=2022)
     ap.add_argument("--last", type=int, default=6,
-                    help="number of recent fixtures to pull per team")
-    ap.add_argument("--out", default="teams.csv")
+                    help="(team mode) recent fixtures per team")
+    ap.add_argument("--neutral", action="store_true",
+                    help="(history mode) treat every fixture as neutral venue")
+    ap.add_argument("--limit", type=int, default=0,
+                    help="(history mode) cap number of fixtures (0 = all)")
+    ap.add_argument("--no-odds", action="store_true",
+                    help="(history mode) skip odds (faster, fewer API calls)")
+    ap.add_argument("--out", default=None)
     args = ap.parse_args()
 
     key = os.environ.get("APIFOOTBALL_KEY")
@@ -236,24 +317,45 @@ def main() -> None:
             "See the header of fetch_data.py for details."
         )
 
+    if args.mode == "history":
+        out = args.out or "history.csv"
+        print(f"Fetching fixtures for league {args.league} "
+              f"season {args.season} ...", file=sys.stderr)
+        rows = build_history(args.league, args.season, key, host,
+                             neutral=args.neutral, limit=args.limit,
+                             with_odds=not args.no_odds)
+        if not rows:
+            sys.exit("No finished fixtures found for that league/season.")
+        with open(out, "w", newline="", encoding="utf-8") as fh:
+            writer = csv.DictWriter(fh, fieldnames=HISTORY_COLUMNS,
+                                    extrasaction="ignore")
+            writer.writeheader()
+            writer.writerows(rows)
+        print(f"\nWrote {len(rows)} matches to {out}.")
+        print("Note: free API tiers usually provide pre-match odds only, not")
+        print("CLOSING odds. CLV needs *_close columns — add them from your own")
+        print("records if you have them. Then run walkforward.py / crossval.py.")
+        return
+
+    # team mode
+    if not args.teams:
+        sys.exit("team mode needs --teams \"Name1,Name2,...\"")
+    out = args.out or "teams.csv"
     names = [t.strip() for t in args.teams.split(",") if t.strip()]
-    rows: List[dict] = []
+    rows = []
     for name in names:
         print(f"Fetching {name} ...", file=sys.stderr)
         row = build_team_row(name, args.league, args.season, args.last,
                              key, host)
         if row:
             rows.append(row)
-
     if not rows:
         sys.exit("Nothing fetched — check the team names / league / season.")
-
-    with open(args.out, "w", newline="", encoding="utf-8") as fh:
+    with open(out, "w", newline="", encoding="utf-8") as fh:
         writer = csv.DictWriter(fh, fieldnames=CSV_COLUMNS)
         writer.writeheader()
         writer.writerows(rows)
-
-    print(f"\nWrote {len(rows)} teams to {args.out}.")
+    print(f"\nWrote {len(rows)} teams to {out}.")
     print("Now set each team's `style` (and ideally `elo`) by hand, then run "
           "batch.py / simulate.py.")
 

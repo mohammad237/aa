@@ -17,9 +17,28 @@ out-of-sample walk-forward backtest. See "Professional mode" below.
 
 No external libraries. Run it with `python3`.
 
+## Quickstart
+
 ```bash
 cd world-cup-betting
-python3 example.py
+python3 tests.py        # 1. confirm everything works (23 tests, pure stdlib)
+python3 run_all.py      # 2. run the ENTIRE pipeline end to end on sample data
+python3 example.py      # 3. or just analyze one fixture
+```
+
+`run_all.py` self-tests, generates the sample data, then runs the single-match
+demo, the matchday + parlays, tournament odds, the naive vs calibrated
+walk-forward backtests (with CLV), train/test calibration, and cross-validation
+— so you can watch the whole thing work before swapping in real data.
+
+To run on **real matches**, pull historical fixtures + odds with a free
+API-Football key (see `fetch_data.py`):
+
+```bash
+export APIFOOTBALL_KEY=your_key
+python3 fetch_data.py --mode history --league 1 --season 2022   # -> history.csv
+python3 fetch_data.py --teams "Brazil,Argentina,France"         # -> teams.csv
+python3 crossval.py                                             # validate
 ```
 
 ---
@@ -383,6 +402,27 @@ they match the model, which predicts regulation-time goals. The model does not
 connect to Stake or place bets — you read its output and decide for yourself.
 
 ---
+
+## All the pieces
+
+| File | What it does |
+|------|--------------|
+| `model.py` | Engine: expected goals, all markets, value + Kelly, market blending |
+| `ratings.py` | Point-in-time Elo engine + as-of team snapshots |
+| `data_io.py` | Load `teams.csv` / `fixtures.csv` |
+| `example.py` | Analyze a single fixture |
+| `batch.py` | Whole-matchday analysis + parlay suggestions |
+| `parlay.py` | Accumulator EV builder |
+| `simulate.py` | Monte-Carlo tournament (group + knockout) odds |
+| `backtest.py` | Static backtest + market settlement logic |
+| `walkforward.py` | Out-of-sample backtest (no look-ahead) + CLV |
+| `calibrate.py` | Train/test parameter calibration |
+| `crossval.py` | Expanding-window cross-validation |
+| `fetch_data.py` | Pull real teams/history+odds from API-Football |
+| `make_sample_history.py` | Generate the synthetic sample `history.csv` |
+| `tests.py` | 23-test stdlib suite |
+| `run_all.py` | Run the entire pipeline end to end |
+| `teams.csv` `fixtures.csv` `groups.csv` `styles.csv` `history.csv` | Sample data |
 
 ## ⚠️ Reality check
 
