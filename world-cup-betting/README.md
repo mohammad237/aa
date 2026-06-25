@@ -180,6 +180,42 @@ python3 batch.py teams.csv my_saturday.csv
 It prints each fixture's probabilities and value bets, then a **matchday value
 board** ranking every +EV bet across the slate by edge.
 
+## Accumulators / parlays
+
+`batch.py` also suggests **parlays** built only from legs the model already
+rates as +EV singles, ranked by combined edge (`parlay.py` has the standalone
+API). Two safeguards are baked in:
+
+- **One leg per fixture.** Legs from the same match are correlated (e.g. "Home
+  win" and "Over 2.5" tend to come together), which breaks the
+  multiply-the-probabilities math, so the builder keeps legs independent by
+  default.
+- **Edge must survive stacking.** A parlay's combined edge is
+  `(∏ model_prob) × (∏ odds) − 1`; the bookmaker margin multiplies too, so only
+  parlays that still clear the threshold are shown, with a deliberately small
+  fractional-Kelly stake (parlay variance is high).
+
+Reality check: even +EV parlays are higher-variance than the equivalent singles.
+They're a smaller-stake, higher-upside play, not a shortcut.
+
+## Auto-fill the data from a live API
+
+`fetch_data.py` populates `teams.csv` from **API-Football** (free tier) — recent
+fixtures, results-based form, and per-match shot stats:
+
+```bash
+export APIFOOTBALL_KEY=your_key_here        # free at dashboard.api-football.com
+python3 fetch_data.py --league 1 --season 2022 \
+    --teams "Brazil,Argentina,France,Spain,Morocco" --out teams.csv
+```
+
+It writes a usable row per team, falling back to league-average defaults for any
+stat the API doesn't return. Two fields are left for you to set by judgement
+after the pull: **`style`** (the tactical identity) and **`elo`** (a light proxy
+is derived from goal difference; swap in FIFA / World-Football-Elo numbers if you
+have them). Without a key the script explains how to get one and exits cleanly;
+network calls go through the environment proxy and never disable TLS.
+
 ## Simulate the whole tournament
 
 `simulate.py` runs a Monte-Carlo of the entire World Cup — group stage round

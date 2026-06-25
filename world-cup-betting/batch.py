@@ -16,6 +16,7 @@ from typing import List, Tuple
 
 from data_io import load_teams, load_fixtures, Fixture
 from model import analyze_match, ValueBet, Team
+from parlay import value_bets_to_legs, best_parlays
 
 
 def run(teams_path: str, fixtures_path: str) -> None:
@@ -61,6 +62,25 @@ def run(teams_path: str, fixtures_path: str) -> None:
     for fixture_name, b in all_value:
         print(f"  {b.edge:+5.1%}  {fixture_name:<22} {b.market:<10} "
               f"@ {b.book_odds:.2f}  stake {b.kelly_stake:.2%}")
+
+    # Suggest a few accumulators built from the strongest single legs
+    # (one leg per fixture, so the legs stay independent).
+    legs = value_bets_to_legs(all_value)
+    print(f"\n{'='*64}")
+    print("  SUGGESTED PARLAYS (independent legs, ranked by combined edge)")
+    print(f"{'='*64}")
+    found = False
+    for size in (2, 3):
+        for p in best_parlays(legs, size=size, top_n=3,
+                              min_edge=0.10, min_leg_edge=0.05):
+            found = True
+            desc = "  +  ".join(
+                f"{leg.fixture}: {leg.market}" for leg in p.legs)
+            print(f"  {size}-leg  odds {p.combined_odds:>6.2f}  "
+                  f"edge {p.edge:+6.1%}  stake {p.kelly_stake:.2%}")
+            print(f"          {desc}")
+    if not found:
+        print("  No parlays clear the edge threshold — stick to singles.")
 
 
 if __name__ == "__main__":
