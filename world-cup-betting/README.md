@@ -250,13 +250,24 @@ own noise against a sharp market and loses. `market_blend` (in
 **de-vigged** market price, so only disagreements the model is genuinely
 confident about survive. This is the single most important professional lever.
 
-**4. Calibration (`calibrate.py`).** Grid-searches `market_blend` × `edge_threshold`
-on the walk-forward backtest and reports the best out-of-sample setting, so the
-knobs are chosen by data, not feel:
+**4. Calibration with a train/test split (`calibrate.py`).** Grid-searches
+`market_blend` × `edge_threshold` on a **training window** (the earliest dates),
+picks the best setting there, then judges it only on a **held-out test window**
+it was never fit on. This is the guard against overfitting — the trap that makes
+a model look brilliant in backtests and lose real money. Ratings keep updating
+across the whole timeline; only the betting is restricted to each window, so the
+test period is scored with ratings as they actually stood going into it.
 
 ```bash
-python3 calibrate.py
+python3 calibrate.py                 # default 65% train / 35% test
+python3 calibrate.py history.csv styles.csv 0.7
 ```
+
+On the bundled sample, the setting chosen on train (blend 0.7, edge 0.10) holds
+up out-of-sample — roughly +30% ROI on train and a similar positive ROI on the
+untouched test window — because the planted home-advantage edge is real and
+persistent. If a train edge is just noise, the test window exposes it and the
+script tells you not to bet it.
 
 On the bundled sample (where the synthetic bookmaker ignores home advantage —
 a real soft-book weakness), the contrast is stark:

@@ -24,7 +24,7 @@ from __future__ import annotations
 import argparse
 import csv
 from collections import defaultdict
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from ratings import EloEngine, EloConfig
 from model import analyze_match
@@ -70,10 +70,13 @@ def _odds(row: dict) -> Dict[str, float]:
 def run(history_path: str, styles_path: str,
         min_games: int = 4, warmup: int = 0,
         edge_threshold: float = 0.03, market_blend: float = 0.0,
+        eval_start: int = 0, eval_end: Optional[int] = None,
         start_bankroll: float = 100.0, quiet: bool = False) -> dict:
     styles = load_styles(styles_path)
     engine = EloEngine(EloConfig(), styles=styles)
     history = load_history(history_path)
+    if eval_end is None:
+        eval_end = len(history)
 
     n_bets = wins = losses = pushes = 0
     skipped_warmup = 0
@@ -93,7 +96,9 @@ def run(history_path: str, styles_path: str,
         neutral = str(row.get("neutral", "1")).strip() in ("1", "true", "yes", "")
         importance = float(row.get("importance", 1.0) or 1.0)
 
-        enough = (engine.games_played(home) >= min_games and
+        in_window = eval_start <= idx < eval_end
+        enough = (in_window and
+                  engine.games_played(home) >= min_games and
                   engine.games_played(away) >= min_games and idx >= warmup)
         book = _odds(row)
 
@@ -124,7 +129,7 @@ def run(history_path: str, styles_path: str,
                     brier_sum += (b.model_prob - outcome) ** 2
                     brier_n += 1
                     buckets[int(min(0.999, b.model_prob) * 10)].append(outcome)
-        elif book:
+        elif book and in_window:
             skipped_warmup += 1
 
         # Update ratings AFTER betting (no look-ahead).
