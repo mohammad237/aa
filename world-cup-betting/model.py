@@ -570,12 +570,43 @@ class ValueBet:
     kelly_stake: float   # fraction of bankroll (already fractional-Kelly scaled)
 
 
+def _devigged_implied(book_odds: Dict[str, float]) -> Dict[str, float]:
+    """
+    Bookmaker-implied probabilities with the margin ("vig") removed, so they sum
+    to 1 within each complementary market group. Markets outside a known group
+    fall back to the raw 1/odds.
+    """
+    groups = [
+        ("Home win", "Draw", "Away win"),
+        ("BTTS Yes", "BTTS No"),
+        ("DNB Home", "DNB Away"),
+        ("Over 0.5", "Under 0.5"), ("Over 1.5", "Under 1.5"),
+        ("Over 2.5", "Under 2.5"), ("Over 3.5", "Under 3.5"),
+        ("Over 4.5", "Under 4.5"),
+    ]
+    implied: Dict[str, float] = {}
+    used = set()
+    for grp in groups:
+        present = [m for m in grp if m in book_odds and book_odds[m] > 1.0]
+        if len(present) >= 2:
+            raw = {m: 1.0 / book_odds[m] for m in present}
+            total = sum(raw.values())
+            for m in present:
+                implied[m] = raw[m] / total
+                used.add(m)
+    for m, o in book_odds.items():
+        if m not in used and o > 1.0:
+            implied[m] = 1.0 / o
+    return implied
+
+
 def evaluate_bets(
     probs: MatchProbabilities,
     book_odds: Dict[str, float],
     edge_threshold: float = 0.03,
     kelly_fraction: float = 0.25,
     max_stake: float = 0.05,
+    market_blend: float = 0.0,
 ) -> List[ValueBet]:
     """
     Compare model probabilities to bookmaker decimal odds and return only the
@@ -587,7 +618,14 @@ def evaluate_bets(
 
     Using fractional Kelly (default 1/4) and a stake cap keeps variance and
     model-error risk in check — full Kelly is notoriously aggressive.
+
+    `market_blend` in [0, 1] is the professional safeguard: instead of trusting
+    the model outright, shrink each model probability toward the (de-vigged)
+    market price before judging value. 0 = pure model (aggressive, noisy);
+    higher = defer more to the sharp market, so only disagreements the model is
+    confident about survive. Around 0.3-0.6 is typical once calibrated.
     """
+    implied = _devigged_implied(book_odds) if market_blend > 0 else {}
     market_probs = {
         "Home win": probs.home_win,
         "Draw": probs.draw,
@@ -631,6 +669,9 @@ def evaluate_bets(
         if market not in market_probs:
             continue
         p = market_probs[market]
+        # Professional safeguard: shrink toward the sharp, de-vigged market.
+        if market_blend > 0 and market in implied:
+            p = (1.0 - market_blend) * p + market_blend * implied[market]
         edge = p * odds - 1.0
         if edge <= edge_threshold:
             continue
@@ -707,7 +748,11 @@ def analyze_match(
     book_odds: Optional[Dict[str, float]] = None,
     neutral: bool = True,
     cfg: ModelConfig = CONFIG,
+    edge_threshold: float = 0.03,
+    market_blend: float = 0.0,
 ) -> Tuple[MatchProbabilities, List[ValueBet]]:
     probs = match_probabilities(home, away, neutral=neutral, cfg=cfg)
-    bets = evaluate_bets(probs, book_odds) if book_odds else []
+    bets = (evaluate_bets(probs, book_odds, edge_threshold=edge_threshold,
+                          market_blend=market_blend)
+            if book_odds else [])
     return probs, bets

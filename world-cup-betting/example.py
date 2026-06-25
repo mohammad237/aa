@@ -81,7 +81,14 @@ def main():
         "CS 2-0": 7.50,           # correct score
     }
 
-    probs, bets = analyze_match(home, away, book_odds=book_odds, neutral=True)
+    # `market_blend` shrinks the model toward the sharp market price and
+    # `edge_threshold` sets how much value we demand before betting. These are
+    # the levers calibrate.py tunes on historical data; the values below are
+    # sensible professional defaults (defer to the market, bet only clear edges).
+    probs, bets = analyze_match(
+        home, away, book_odds=book_odds, neutral=True,
+        market_blend=0.5, edge_threshold=0.05,
+    )
 
     print(f"\n{'='*56}")
     print(f"  {home.name}  vs  {away.name}   (neutral venue)")

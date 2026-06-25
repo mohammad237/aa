@@ -10,6 +10,11 @@ for the things you asked about:
 - **Underlying match stats** — shots, shots on target, big chances, tackles,
   interceptions, offsides, possession
 
+It also runs as a **professional, point-in-time pipeline**: ratings are rebuilt
+from results up to each match date (no look-ahead), the model is shrunk toward
+the sharp market to kill overconfidence, and parameters are calibrated on an
+out-of-sample walk-forward backtest. See "Professional mode" below.
+
 No external libraries. Run it with `python3`.
 
 ```bash
@@ -215,6 +220,63 @@ after the pull: **`style`** (the tactical identity) and **`elo`** (a light proxy
 is derived from goal difference; swap in FIFA / World-Football-Elo numbers if you
 have them). Without a key the script explains how to get one and exits cleanly;
 network calls go through the environment proxy and never disable TLS.
+
+## Professional mode (point-in-time, no look-ahead)
+
+The static backtest has one fatal flaw for real betting: it rates every past
+match with *today's* numbers, which it could not have known at kickoff. The
+professional pipeline fixes this and adds the safeguards a sharp bettor actually
+uses.
+
+**1. Point-in-time ratings (`ratings.py`).** An Elo engine processes results in
+date order and, for any match, hands back each team's rating, rolling
+attack/defense, and form built **only from earlier games** (World-Football-Elo
+goal-margin multiplier, match-importance weighting, home/neutral handling,
+sample-size shrinkage on thin data).
+
+**2. Walk-forward backtest (`walkforward.py`).** Replays history in order:
+rate → bet → settle → *then* update ratings. Nothing sees the current or any
+future result, so the ROI is genuinely out-of-sample.
+
+```bash
+python3 make_sample_history.py > history.csv   # synthetic sample (see note)
+python3 walkforward.py --blend 0.0 --edge 0.03  # naive model
+python3 walkforward.py --blend 0.6 --edge 0.08  # calibrated
+```
+
+**3. Market blending — the overconfidence fix.** Left alone, the model bets its
+own noise against a sharp market and loses. `market_blend` (in
+`analyze_match`/`evaluate_bets`) shrinks each model probability toward the
+**de-vigged** market price, so only disagreements the model is genuinely
+confident about survive. This is the single most important professional lever.
+
+**4. Calibration (`calibrate.py`).** Grid-searches `market_blend` × `edge_threshold`
+on the walk-forward backtest and reports the best out-of-sample setting, so the
+knobs are chosen by data, not feel:
+
+```bash
+python3 calibrate.py
+```
+
+On the bundled sample (where the synthetic bookmaker ignores home advantage —
+a real soft-book weakness), the contrast is stark:
+
+| Setting | Bets | ROI (flat) | Kelly bankroll | Brier |
+|---------|-----:|-----------:|---------------:|------:|
+| Naive (blend 0.0, edge 0.03)      | 342 | **−5.7%** | 100 → 50 | 0.260 |
+| Calibrated (blend 0.6, edge 0.08) | 129 | **+6.9%** | 100 → 122 | 0.235 |
+
+The calibrated model's profit comes almost entirely from the **Home win** market
+(+79% ROI) — exactly the inefficiency planted in the data. That's the whole
+idea: you make money only where you capture something the market missed, and the
+calibration + blending stop you from betting everywhere else.
+
+> **About the sample data.** `history.csv` is *synthetic* (built by
+> `make_sample_history.py`) so the pipeline runs out of the box. It deliberately
+> contains one exploitable bias to demonstrate the workflow. Real bookmakers are
+> far sharper — swap in genuine results + odds (via `fetch_data.py` or your own
+> records) before trusting any number. With a perfectly efficient book, **no**
+> setting is profitable, and the calibrator will correctly tell you so.
 
 ## Backtest the strategy
 
